@@ -9,10 +9,11 @@ from alembic import context
 # access to the values within the .ini file in use.
 from app.core.config import settings
 from app.models.base_model import Base
+from app.models.user_model import User
 
 config = context.config
 section = config.config_ini_section
-config.set_section_option(section, "DATABASE_URL", settings.SYNC_DATABASE_URL)
+config.set_section_option(section, "sqlalchemy.url", settings.SYNC_DATABASE_URL)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

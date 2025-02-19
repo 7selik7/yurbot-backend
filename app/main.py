@@ -3,9 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.routes import helthcheck_route
+from app.routes import auth_route
 app = FastAPI()
 
 app.include_router(router=helthcheck_route.router, tags=["healthcheck"])
+app.include_router(router=auth_route.router, tags=["auth"])
 
 app.add_middleware(
     CORSMiddleware,
@@ -14,7 +16,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 
 if __name__ == "__main__":
