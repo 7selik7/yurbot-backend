@@ -2,8 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-
+from app.routes import helthcheck_route
 app = FastAPI()
+
+app.include_router(router=helthcheck_route.router, tags=["healthcheck"])
 
 app.add_middleware(
     CORSMiddleware,
