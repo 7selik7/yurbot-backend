@@ -1,0 +1,39 @@
+services:
+  app:
+    build: .
+    ports:
+      - ${LOCAL_PORT}:${PORT}
+    volumes:
+      - .:/app
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - app-network
+
+  redis:
+    image: redis:latest
+    ports:
+      - ${REDIS_LOCAL_PORT}:${REDIS_PORT}
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - ${DB_LOCAL_PORT}:${DB_PORT}
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge
