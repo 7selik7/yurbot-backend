@@ -6,8 +6,8 @@ from app.routes import helthcheck_route
 from app.routes import auth_route
 app = FastAPI()
 
-app.include_router(router=helthcheck_route.router, tags=["healthcheck"])
-app.include_router(router=auth_route.router, tags=["auth"])
+app.include_router(router=helthcheck_route.router, tags=["Healthcheck"])
+app.include_router(router=auth_route.router, tags=["Auth"], prefix="/auth")
 
 app.add_middleware(
     CORSMiddleware,

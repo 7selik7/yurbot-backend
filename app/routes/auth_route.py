@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.schemas.auth_schemas import AuthParams, TokenResponse
+from app.schemas.auth_schemas import AuthParams, TokenResponse, RefreshToken
 from app.schemas.user_schemas import FullUser
 
 from app.services import get_auth_service
@@ -25,6 +25,10 @@ async def forgot_password():
 async def reset_password():
     return {"status_code": 200, "detail": "ok", "result": "working"}
 
-@router.post("/me")
-async def get_user_data():
-    return {"status_code": 200, "detail": "ok", "result": "working"}
+@router.post("/refresh")
+async def refresh_token(refresh_token_data: RefreshToken, auth_service: AuthService = Depends(get_auth_service)):
+    return await auth_service.refresh_token(token=refresh_token_data.refresh_token)
+
+@router.get("/me", response_model=FullUser)
+async def get_user_data(current_user: FullUser = Depends(AuthService.get_current_user)):
+    return current_user
