@@ -6,6 +6,7 @@ from app.db.postgres import get_session
 from app.models.user_model import User
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth_schemas import AuthParams, TokenResponse
+from app.schemas.user_schemas import FullUser
 from app.utils.jwt_service import jwt_service, JwtService
 from app.utils.password_service import password_service
 
@@ -57,7 +58,7 @@ class AuthService:
     async def get_current_user(
         token: HTTPAuthorizationCredentials = Depends(security),
         session: AsyncSession = Depends(get_session)
-    ) -> User:
+    ) -> FullUser:
         decoded_token = JwtService.verify_jwt_token(token=token.credentials)
         if not decoded_token:
             raise HTTPException(
@@ -65,4 +66,5 @@ class AuthService:
                 detail="Invalid token",
             )
         user_repository = UserRepository(session=session)
-        return await user_repository.get_one(email=decoded_token.get("email"))
+        db_user = await user_repository.get_one(email=decoded_token.get("email"))
+        return FullUser.model_validate(db_user)

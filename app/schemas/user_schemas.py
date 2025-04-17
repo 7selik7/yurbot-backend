@@ -16,3 +16,6 @@ class FullUser(BaseUser):
     is_confirmed: bool
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        from_attributes = True

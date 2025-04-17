@@ -10,6 +10,8 @@ from alembic import context
 from app.core.config import settings
 from app.models.base_model import Base
 from app.models.user_model import User
+from app.models.chat_model import Chat
+from app.models.message_model import Message
 
 config = context.config
 section = config.config_ini_section

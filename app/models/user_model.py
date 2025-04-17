@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, Boolean
+from sqlalchemy.orm import relationship
 
 from app.models.base_model import BaseClass
 
@@ -13,4 +14,6 @@ class User(BaseClass):
     avatar_url = Column(String, nullable=True)
     is_first_login = Column(Boolean, nullable=False, default=True)
     is_confirmed = Column(Boolean, nullable=False, default=False)
+
+    chats = relationship("Chat", back_populates="owner", cascade="all, delete-orphan")
 

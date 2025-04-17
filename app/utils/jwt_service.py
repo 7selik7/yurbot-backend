@@ -6,7 +6,7 @@ from app.core.config import settings
 
 class JwtService:
     def create_access_token(self, payload: dict) -> str:
-        expiration = self.get_expiration_time(minutes=20)
+        expiration = self.get_expiration_time(days=7)
         return jwt.encode({**payload, "exp": expiration}, settings.JWT_SECRET_KEY, algorithm="HS256")
 
     def create_refresh_token(self, payload: dict) -> str:
