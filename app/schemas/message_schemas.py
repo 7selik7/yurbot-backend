@@ -19,6 +19,7 @@ class MessageWithoutChildren(BaseModel):
     class Config:
         from_attributes = True
 
+
 class FullMessage(BaseModel):
     uuid: UUID
     text: str
@@ -33,11 +34,22 @@ class FullMessage(BaseModel):
     class Config:
         from_attributes = True
 
+
 class SendMessage(BaseModel):
     chat_uuid: UUID | None
     parent_uuid: UUID | None
     text: str
 
+
+class RegenerateMessage(BaseModel):
+    chat_uuid: UUID
+    message_uuid: UUID
+
+
 class SendMessageResponse(BaseModel):
     message: FullMessage
+    answer: FullMessage
+
+
+class RegenerateMessageResponse(BaseModel):
     answer: FullMessage

@@ -9,7 +9,8 @@ from app.models.message_model import Message
 from app.repositories.chat_repository import ChatRepository
 from app.repositories.message_repository import MessageRepository
 from app.schemas.chat_schemas import FullChat
-from app.schemas.message_schemas import FullMessage, SendMessage, MessageWithoutChildren, SendMessageResponse
+from app.schemas.message_schemas import FullMessage, SendMessage, MessageWithoutChildren, SendMessageResponse, \
+    RegenerateMessage
 
 security = HTTPBearer()
 
@@ -36,7 +37,7 @@ class ChatService:
         chat_dict["messages"] = []
 
         chat_schema = FullChat(**chat_dict)
-        msg_schema = FullMessage.model_validate(initial_message)
+        msg_schema = FullMessage(**{**MessageWithoutChildren.model_validate(initial_message).model_dump(), "children": []})
         chat_schema.messages.append(msg_schema)
         return chat_schema
 
@@ -66,7 +67,7 @@ class ChatService:
         })
 
         answer_message = await self.message_repository.create_one({
-            "text": "Hello, how can I help you?",
+            "text": "",
             "mark": MarkType.NONE,
             "author": AuthorType.AI,
             "parent_uuid": user_message.uuid,
@@ -77,7 +78,26 @@ class ChatService:
         # await self.chat_repository.update_one(model_uuid=send_message_data.chat_uuid, data={})
 
         return {
-            "message": FullMessage(**{**MessageWithoutChildren.model_validate(user_message).model_dump(), "children": [answer_message.uuid]}),
+            "message": FullMessage(**{**MessageWithoutChildren.model_validate(user_message).model_dump(), "children": []}),
             "answer": FullMessage(**{**MessageWithoutChildren.model_validate(answer_message).model_dump(), "children": []}),
         }
 
+    async def regenerate_message(self, regenerate_message_data: RegenerateMessage, owner_uuid: UUID) -> dict:
+        updated_answer = await self.message_repository.update_one(
+            model_uuid=regenerate_message_data.message_uuid,
+            data={"text": ""}
+        )
+
+        return {
+            "answer": FullMessage(
+                **{**MessageWithoutChildren.model_validate(updated_answer).model_dump(), "children": []}
+            ),
+        }
+
+    async def complete_answer(self, answer_uuid: UUID, text: str) -> dict:
+        await self.message_repository.get_one(uuid=answer_uuid)
+        updated_message = await self.message_repository.update_one(model_uuid=answer_uuid, data={"text": text})
+
+        return FullMessage(
+            **{**MessageWithoutChildren.model_validate(updated_message).model_dump(), "children": []}
+        ).model_dump()
