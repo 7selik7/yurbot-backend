@@ -1,14 +1,15 @@
+from collections import defaultdict
 from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
 from app.enums.message_enum import MarkType, AuthorType
-from app.models.chat_model import Chat
-from app.repositories import chat_repository
+
+from app.models.message_model import Message
 from app.repositories.chat_repository import ChatRepository
 from app.repositories.message_repository import MessageRepository
 from app.schemas.chat_schemas import FullChat
-from app.schemas.message_schemas import FullMessage
+from app.schemas.message_schemas import FullMessage, SendMessage, MessageWithoutChildren, SendMessageResponse
 
 security = HTTPBearer()
 
@@ -18,10 +19,10 @@ class ChatService:
         self.chat_repository = chat_repository
         self.message_repository = message_repository
 
-    async def create_chat(self, title: str, message: str, owner_id: UUID):
+    async def create_chat(self, message: str, owner_uuid: UUID):
         # TODO add generating chat name based on image
         new_chat = await self.chat_repository.create_one(
-            data={"title": title, "is_deleted": False, "is_pinned": True, "owner_uuid": owner_id}
+            data={"title": "New Chat", "is_deleted": False, "is_pinned": True, "owner_uuid": owner_uuid}
         )
         initial_message = await self.message_repository.create_one({
             "text": "",
@@ -41,3 +42,42 @@ class ChatService:
 
     async def get_chats(self, owner_uuid: UUID):
         return await self.chat_repository.get_chats(owner_uuid=owner_uuid)
+
+    async def get_chat_messages(self, owner_uuid: UUID, chat_uuid: UUID) -> list[FullMessage]:
+        await self.chat_repository.get_one_or_404(uuid=chat_uuid, owner_uuid=owner_uuid)
+
+        raw_messages = await self.message_repository.get_chat_messages(chat_uuid=chat_uuid)
+
+        return [
+            FullMessage(
+                **FullMessage.model_validate(msg).model_dump(),
+                children=[child.uuid for child in msg.children]
+            )
+            for msg in raw_messages
+        ]
+
+    async def send_message(self, send_message_data: SendMessage, owner_uuid: UUID) -> dict:
+        user_message = await self.message_repository.create_one({
+            "text": send_message_data.text,
+            "mark": MarkType.NONE,
+            "author": AuthorType.USER,
+            "parent_uuid": send_message_data.parent_uuid,
+            "chat_uuid": send_message_data.chat_uuid
+        })
+
+        answer_message = await self.message_repository.create_one({
+            "text": "Hello, how can I help you?",
+            "mark": MarkType.NONE,
+            "author": AuthorType.AI,
+            "parent_uuid": user_message.uuid,
+            "chat_uuid": send_message_data.chat_uuid
+        })
+
+        # TODO add updated_at
+        # await self.chat_repository.update_one(model_uuid=send_message_data.chat_uuid, data={})
+
+        return {
+            "message": FullMessage(**{**MessageWithoutChildren.model_validate(user_message).model_dump(), "children": [answer_message.uuid]}),
+            "answer": FullMessage(**{**MessageWithoutChildren.model_validate(answer_message).model_dump(), "children": []}),
+        }
+

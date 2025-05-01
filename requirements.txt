@@ -4,6 +4,8 @@ bcrypt==4.2.1
 fastapi==0.115.8
 uvicorn==0.34.0
 pydantic-settings==2.7.1
+pydantic==2.7.1
 psycopg2==2.9.10
 PyJWT==2.10.1
 uuid==1.30
+websockets==15.0.1

@@ -1,6 +1,7 @@
 from typing import TypeVar,  Generic
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import update, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +27,13 @@ class BaseRepository(Generic[ModelType]):
         query = select(self.model).filter_by(**params)
         result = await self.session.execute(query)
         db_row = result.scalar_one_or_none()
+        return db_row
+
+    async def get_one_or_404(self, **params) -> ModelType:
+        db_row = await self.get_one(**params)
+        if db_row is None:
+            # TODO add custom exception
+            raise HTTPException(status_code=404, detail="Not found")
         return db_row
 
     async def get_many(self, skip: int = 0, limit: int = 10, **params) -> list[ModelType]:
