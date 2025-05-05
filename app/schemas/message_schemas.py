@@ -46,6 +46,14 @@ class RegenerateMessage(BaseModel):
     message_uuid: UUID
 
 
+class UpdateChatTitle(BaseModel):
+    new_title: str
+
+
+class MarkMessage(BaseModel):
+    mark: MarkType
+
+
 class SendMessageResponse(BaseModel):
     message: FullMessage
     answer: FullMessage

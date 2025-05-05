@@ -1,9 +1,12 @@
 from collections import defaultdict
+
+from fastapi import HTTPException
 from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
 from app.enums.message_enum import MarkType, AuthorType
+from app.models.chat_model import Chat
 
 from app.models.message_model import Message
 from app.repositories.chat_repository import ChatRepository
@@ -74,8 +77,10 @@ class ChatService:
             "chat_uuid": send_message_data.chat_uuid
         })
 
-        # TODO add updated_at
-        # await self.chat_repository.update_one(model_uuid=send_message_data.chat_uuid, data={})
+        await self.chat_repository.update_one(
+            model_uuid=send_message_data.chat_uuid,
+            data={"uuid": send_message_data.chat_uuid}
+        )
 
         return {
             "message": FullMessage(**{**MessageWithoutChildren.model_validate(user_message).model_dump(), "children": []}),
@@ -101,3 +106,17 @@ class ChatService:
         return FullMessage(
             **{**MessageWithoutChildren.model_validate(updated_message).model_dump(), "children": []}
         ).model_dump()
+
+    async def update_chat_title(self, chat_uuid: UUID, new_title: str) -> Chat:
+        return await self.chat_repository.update_one(model_uuid=chat_uuid, data={"title": new_title})
+
+    async def mark_message(self, message_uuid: UUID, mark: MarkType) -> Message:
+        return await self.message_repository.update_one(model_uuid=message_uuid, data={"mark": mark})
+
+    async def delete_chat(self, chat_uuid: UUID, owner_uuid: UUID):
+        db_chat = await self.chat_repository.get_one_or_404(uuid=chat_uuid)
+        if db_chat.owner_uuid != owner_uuid:
+            raise HTTPException(status_code=400, detail="You are not the owner of this chat")
+
+        await self.chat_repository.update_one(model_uuid=chat_uuid, data={"is_deleted": True})
+

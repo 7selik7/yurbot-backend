@@ -1,13 +1,16 @@
 import asyncio
+import json
 
+import httpx
 from fastapi import APIRouter, Depends, WebSocket
 from fastapi.encoders import jsonable_encoder
 from uuid import UUID
 
 from app.db.postgres import get_session
+from app.enums.message_enum import MarkType
 from app.schemas.chat_schemas import CreateChat, FullChat
 from app.schemas.message_schemas import FullMessage, SendMessage, SendMessageResponse, RegenerateMessage, \
-    RegenerateMessageResponse
+    RegenerateMessageResponse, MarkMessage, UpdateChatTitle
 from app.schemas.user_schemas import FullUser
 
 from app.services import get_chat_service, AuthService
@@ -61,6 +64,38 @@ async def send_message(
      return await chat_service.regenerate_message(regenerate_message_data=regenerate_message_data, owner_uuid=user.uuid)
 
 
+@router.patch("/{chat_uuid}/title")
+async def update_chat_title(
+    chat_uuid: UUID,
+    update_chat_title_data: UpdateChatTitle,
+    user: FullUser = Depends(AuthService.get_current_user),
+    chat_service: ChatService = Depends(get_chat_service)
+):
+    await chat_service.update_chat_title(chat_uuid=chat_uuid, new_title=update_chat_title_data.new_title)
+    return {"status": "ok"}
+
+
+@router.patch("/{message_uuid}/mark")
+async def mark_message(
+    message_uuid: UUID,
+    mark_message_data: MarkMessage,
+    user: FullUser = Depends(AuthService.get_current_user),
+    chat_service: ChatService = Depends(get_chat_service)
+):
+    await chat_service.mark_message(message_uuid=message_uuid, mark=mark_message_data.mark)
+    return {"status": "ok"}
+
+
+@router.delete("/{chat_uuid}")
+async def delete_chat(
+    chat_uuid: UUID,
+    user: FullUser = Depends(AuthService.get_current_user),
+    chat_service: ChatService = Depends(get_chat_service)
+):
+    await chat_service.delete_chat(chat_uuid=chat_uuid, owner_uuid=user.uuid)
+    return {"status": "ok"}
+
+
 @router.websocket("/ws/{answer_uuid}")
 async def websocket_endpoint(
     answer_uuid: UUID,
@@ -71,21 +106,34 @@ async def websocket_endpoint(
 
     async with resolve_async_generator(get_session()) as session:
         chat_service: ChatService = await get_chat_service(session=session)
+        db_message = await chat_service.message_repository.get_one_with_parent(message_uuid=answer_uuid)
 
-        await asyncio.sleep(5)
+        try:
+            await websocket.send_json({"type": "start", "message": db_message.parent.text})
 
-        text = (
-            "Hello! I'm your virtual assistant. "
-            "I can help you analyze data, summarize documents, generate ideas, and much more. "
-            "If you ever feel stuck, just ask. I'm always here to help you move forward!"
-        )
+            prompt = f"Питання: {db_message.parent.text}\nВідповідь:"
 
-        accumulated_text = ""
-        for letter in text:
-            accumulated_text += letter
-            await websocket.send_json({"type": "message", "message": accumulated_text})
-            await asyncio.sleep(0.01)
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                async with client.stream(
+                    "POST",
+                    "http://host.docker.internal:11434/api/generate",
+                    json={
+                        "model": "mistral",
+                        "prompt": prompt,
+                        "stream": True
+                    }
+                ) as response:
+                    accumulated = ""
+                    async for line in response.aiter_lines():
+                        if line:
+                            data = json.loads(line)
+                            token = data.get("response", "")
+                            accumulated += token
+                            await websocket.send_json({"type": "message", "message": accumulated})
 
-        message = await chat_service.complete_answer(answer_uuid=answer_uuid, text=text)
-        await websocket.send_json({"type": "close", "message": jsonable_encoder(message)})
+            message = await chat_service.complete_answer(answer_uuid=answer_uuid, text=accumulated)
+            await websocket.send_json({"type": "close", "message": jsonable_encoder(message)})
+
+        except Exception as e:
+            await websocket.send_json({"type": "error", "message": str(e)})
     await websocket.close()

@@ -18,3 +18,12 @@ class MessageRepository(BaseRepository[Message]):
         )
         result = await self.session.execute(query)
         return result.scalars().all()
+
+    async def get_one_with_parent(self, message_uuid: UUID) -> Message:
+        query = (
+            select(self.model)
+            .options(selectinload(self.model.parent))
+            .where(self.model.uuid == message_uuid)
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
