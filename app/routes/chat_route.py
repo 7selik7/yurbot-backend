@@ -106,12 +106,18 @@ async def websocket_endpoint(
 
     async with resolve_async_generator(get_session()) as session:
         chat_service: ChatService = await get_chat_service(session=session)
-        db_message = await chat_service.message_repository.get_one_with_parent(message_uuid=answer_uuid)
+        messages = await chat_service.message_repository.get_message_history(message_uuid=answer_uuid)
 
         try:
-            await websocket.send_json({"type": "start", "message": db_message.parent.text})
+            await websocket.send_json({"type": "start", "message": messages[-2]})
 
-            prompt = f"Питання: {db_message.parent.text}\nВідповідь:"
+            history_prompt = ""
+            for i, msg in enumerate(messages):
+                if i == 0:
+                    continue
+
+                role = "Асистент" if i % 2 == 0 else "Користувач"
+                history_prompt += f"{role}: {msg}\n"
 
             async with httpx.AsyncClient(timeout=300.0) as client:
                 async with client.stream(
@@ -119,7 +125,9 @@ async def websocket_endpoint(
                     "http://host.docker.internal:11434/api/generate",
                     json={
                         "model": "mistral",
-                        "prompt": prompt,
+                        "prompt": history_prompt,
+                        "system": "Ти є юридичним асистентом. Завжди відповідай професійно та офіційно українською мовою. "
+                                  "Якщо ти не знаєш чіткої відповіді на питання тоді просто вибчся і скажи, що ти цього не знаеш",
                         "stream": True
                     }
                 ) as response:
