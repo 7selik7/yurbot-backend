@@ -19,7 +19,7 @@ services:
       - app-network
 
   postgres:
-    image: postgres:latest
+    image: ankane/pgvector:v0.5.1
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}

@@ -1,19 +1,19 @@
 import asyncio
 import json
+from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Depends, WebSocket
+from fastapi import APIRouter, Depends, WebSocket, Form, UploadFile, File
 from fastapi.encoders import jsonable_encoder
 from uuid import UUID
 
 from app.db.postgres import get_session
-from app.enums.message_enum import MarkType
 from app.schemas.chat_schemas import CreateChat, FullChat
 from app.schemas.message_schemas import FullMessage, SendMessage, SendMessageResponse, RegenerateMessage, \
     RegenerateMessageResponse, MarkMessage, UpdateChatTitle
 from app.schemas.user_schemas import FullUser
 
-from app.services import get_chat_service, AuthService
+from app.services import get_chat_service, AuthService, ArticleService, get_article_service
 from app.services.chat_service import ChatService
 from app.utils.manual_dependencies import resolve_async_generator
 
@@ -48,11 +48,15 @@ async def get_chat_messages(
 
 @router.post("/send_message", response_model=SendMessageResponse)
 async def send_message(
-    send_message_data: SendMessage,
+    chat_uuid: Optional[UUID] = Form(None),
+    parent_uuid: Optional[UUID] = Form(None),
+    text: str = Form(...),
+    files: list[UploadFile] = File(default=[]),
     user: FullUser = Depends(AuthService.get_current_user),
     chat_service: ChatService = Depends(get_chat_service),
 ):
-     return await chat_service.send_message(send_message_data=send_message_data,owner_uuid=user.uuid)
+    send_message_data = SendMessage(chat_uuid=chat_uuid, parent_uuid=parent_uuid, text=text)
+    return await chat_service.send_message(send_message_data=send_message_data, files=files, owner_uuid=user.uuid)
 
 
 @router.post("/regenerate_message", response_model=RegenerateMessageResponse)
@@ -106,10 +110,14 @@ async def websocket_endpoint(
 
     async with resolve_async_generator(get_session()) as session:
         chat_service: ChatService = await get_chat_service(session=session)
+        article_service: ArticleService = await get_article_service(session=session)
         messages = await chat_service.message_repository.get_message_history(message_uuid=answer_uuid)
 
         try:
             await websocket.send_json({"type": "start", "message": messages[-2]})
+
+            last_user_message = messages[-2]
+            context_from_article = await article_service.find_nearest_articles(text=last_user_message)
 
             history_prompt = ""
             for i, msg in enumerate(messages):
@@ -119,13 +127,20 @@ async def websocket_endpoint(
                 role = "Асистент" if i % 2 == 0 else "Користувач"
                 history_prompt += f"{role}: {msg}\n"
 
+            final_prompt = (
+                f"Ознайомся з наступною інформацією з Кримінального Кодексу України, яка може буде корисна для "
+                f"відповіді на питання:\n{context_from_article}\n\n{history_prompt}"
+            )
+
+            print(final_prompt)
+
             async with httpx.AsyncClient(timeout=300.0) as client:
                 async with client.stream(
                     "POST",
                     "http://host.docker.internal:11434/api/generate",
                     json={
                         "model": "mistral",
-                        "prompt": history_prompt,
+                        "prompt": final_prompt,
                         "system": "Ти є юридичним асистентом. Завжди відповідай професійно та офіційно українською мовою. "
                                   "Якщо ти не знаєш чіткої відповіді на питання тоді просто вибчся і скажи, що ти цього не знаеш",
                         "stream": True

@@ -32,6 +32,12 @@ class Message(BaseClass):
     chat_uuid = Column(ForeignKey("chats.uuid"), nullable=False)
     chat = relationship("Chat", back_populates="messages")
 
+    documents = relationship(
+        "Document",
+        back_populates="message",
+        cascade="all, delete-orphan"
+    )
+
     @property
     def children(self) -> list[UUID]:
         return [child.uuid for child in self.children_rel] if self.children_rel else []

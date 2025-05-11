@@ -1,27 +1,34 @@
-from collections import defaultdict
+import os
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.enums.message_enum import MarkType, AuthorType
 from app.models.chat_model import Chat
 
 from app.models.message_model import Message
 from app.repositories.chat_repository import ChatRepository
+from app.repositories.document_repository import DocumentRepository
 from app.repositories.message_repository import MessageRepository
 from app.schemas.chat_schemas import FullChat
-from app.schemas.message_schemas import FullMessage, SendMessage, MessageWithoutChildren, SendMessageResponse, \
-    RegenerateMessage
+from app.schemas.message_schemas import FullMessage, SendMessage, MessageWithoutChildren, RegenerateMessage
 
 security = HTTPBearer()
 
 class ChatService:
-    def __init__(self, session: AsyncSession, chat_repository: ChatRepository, message_repository: MessageRepository):
+    def __init__(
+            self,
+            session: AsyncSession,
+            chat_repository: ChatRepository,
+            message_repository: MessageRepository,
+            document_repository: DocumentRepository,
+    ):
         self.session = session
         self.chat_repository = chat_repository
         self.message_repository = message_repository
+        self.document_repository = document_repository
 
     async def create_chat(self, message: str, owner_uuid: UUID):
         # TODO add generating chat name based on image
@@ -40,7 +47,7 @@ class ChatService:
         chat_dict["messages"] = []
 
         chat_schema = FullChat(**chat_dict)
-        msg_schema = FullMessage(**{**MessageWithoutChildren.model_validate(initial_message).model_dump(), "children": []})
+        msg_schema = FullMessage(**{**MessageWithoutChildren.model_validate(initial_message).model_dump(), "children": [], "documents": []})
         chat_schema.messages.append(msg_schema)
         return chat_schema
 
@@ -60,7 +67,9 @@ class ChatService:
             for msg in raw_messages
         ]
 
-    async def send_message(self, send_message_data: SendMessage, owner_uuid: UUID) -> dict:
+    async def send_message(self, send_message_data: SendMessage, files: list[UploadFile], owner_uuid: UUID) -> dict:
+        UPLOAD_DIR = "media"
+
         user_message = await self.message_repository.create_one({
             "text": send_message_data.text,
             "mark": MarkType.NONE,
@@ -68,6 +77,32 @@ class ChatService:
             "parent_uuid": send_message_data.parent_uuid,
             "chat_uuid": send_message_data.chat_uuid
         })
+
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+        saved_files = []
+        documents_payload = []
+
+        for file in files:
+            content = await file.read()
+
+            unique_filename = f"{uuid4()}{os.path.splitext(file.filename)[1]}"
+            file_path = os.path.join(UPLOAD_DIR, unique_filename)
+
+            with open(file_path, "wb") as f:
+                f.write(content)
+
+            documents_payload.append({
+                "name": file.filename,
+                "url": file_path,
+                "mime_type": file.content_type,
+                "size": str(len(content)),
+                "message_uuid": user_message.uuid,
+            })
+
+            saved_files.append(file_path)
+
+        db_files = await self.document_repository.create_many(documents_payload)
 
         answer_message = await self.message_repository.create_one({
             "text": "",
@@ -83,8 +118,16 @@ class ChatService:
         )
 
         return {
-            "message": FullMessage(**{**MessageWithoutChildren.model_validate(user_message).model_dump(), "children": []}),
-            "answer": FullMessage(**{**MessageWithoutChildren.model_validate(answer_message).model_dump(), "children": []}),
+            "message": FullMessage(**{
+                **MessageWithoutChildren.model_validate(user_message).model_dump(),
+                "children": [],
+                "documents": db_files
+            }),
+            "answer": FullMessage(**{
+                **MessageWithoutChildren.model_validate(answer_message).model_dump(),
+                "children": [],
+                "documents": []
+            }),
         }
 
     async def regenerate_message(self, regenerate_message_data: RegenerateMessage, owner_uuid: UUID) -> dict:
@@ -94,18 +137,22 @@ class ChatService:
         )
 
         return {
-            "answer": FullMessage(
-                **{**MessageWithoutChildren.model_validate(updated_answer).model_dump(), "children": []}
-            ),
+            "answer": FullMessage(**{
+                **MessageWithoutChildren.model_validate(updated_answer).model_dump(),
+                "children": [],
+                "documents": []
+            })
         }
 
     async def complete_answer(self, answer_uuid: UUID, text: str) -> dict:
         await self.message_repository.get_one(uuid=answer_uuid)
         updated_message = await self.message_repository.update_one(model_uuid=answer_uuid, data={"text": text})
 
-        return FullMessage(
-            **{**MessageWithoutChildren.model_validate(updated_message).model_dump(), "children": []}
-        ).model_dump()
+        return FullMessage(**{
+            **MessageWithoutChildren.model_validate(updated_message).model_dump(),
+            "children": [],
+            "documents": []
+        }).model_dump()
 
     async def update_chat_title(self, chat_uuid: UUID, new_title: str) -> Chat:
         return await self.chat_repository.update_one(model_uuid=chat_uuid, data={"title": new_title})

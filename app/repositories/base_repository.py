@@ -23,6 +23,19 @@ class BaseRepository(Generic[ModelType]):
         await self.session.refresh(row)
         return row
 
+    async def create_many(self, data_list: list[dict]) -> list[ModelType]:
+        if not data_list:
+            return []
+
+        objects = [self.model(**data) for data in data_list]
+        self.session.add_all(objects)
+        await self.session.commit()
+
+        for obj in objects:
+            await self.session.refresh(obj)
+
+        return objects
+
     async def get_one(self, **params) -> ModelType:
         query = select(self.model).filter_by(**params)
         result = await self.session.execute(query)

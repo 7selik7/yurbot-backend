@@ -18,7 +18,8 @@ class ChatRepository(BaseRepository[Chat]):
             .where(self.model.is_deleted == False)
             .options(
                 selectinload(self.model.messages).options(
-                    selectinload(Message.children_rel)
+                    selectinload(Message.children_rel),
+                    selectinload(Message.documents)
                 )
             )
         )

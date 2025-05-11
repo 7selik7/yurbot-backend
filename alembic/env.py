@@ -12,6 +12,8 @@ from app.models.base_model import Base
 from app.models.user_model import User
 from app.models.chat_model import Chat
 from app.models.message_model import Message
+from app.models.article_model import Article
+from app.models.document_model import Document
 
 config = context.config
 section = config.config_ini_section

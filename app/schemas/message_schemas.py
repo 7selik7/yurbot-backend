@@ -1,10 +1,12 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel
 from uuid import UUID
 
 from app.enums.message_enum import MarkType, AuthorType
+from app.schemas.document_schemas import Document
+
 
 class MessageWithoutChildren(BaseModel):
     uuid: UUID
@@ -30,6 +32,7 @@ class FullMessage(BaseModel):
     created_at: datetime
     updated_at: datetime
     children: list[UUID]
+    documents: list[Document]
 
     class Config:
         from_attributes = True

@@ -29,7 +29,7 @@ class MessageRepository(BaseRepository[Message]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_message_history(self, message_uuid: UUID) -> list[Message]:
+    async def get_message_history(self, message_uuid: UUID) -> list[str]:
         parent_alias = aliased(self.model)
 
         cte = (
