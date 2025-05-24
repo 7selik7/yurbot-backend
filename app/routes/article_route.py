@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends
 
-from app.schemas.auth_schemas import AuthParams
 from app.services import ArticleService, get_article_service
 
 

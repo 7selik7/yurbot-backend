@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     REDIS_DOMAIN: str
     REDIS_PORT: int
     REDIS_LOCAL_PORT: int
+    REDIS_MAX_CONNECTIONS: int
+
+    EMAIL_HOST: str = "smtp.gmail.com"
+    EMAIL_PORT: int = 587
+    EMAIL_EMAIL: str
+    EMAIL_PASSWORD: str
 
     JWT_SECRET_KEY: str
 
@@ -27,6 +33,10 @@ class Settings(BaseSettings):
     @property
     def SYNC_DATABASE_URL(self) -> str:
         return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+
+    @property
+    def redis_url(self) -> str:
+        return f"redis://{self.REDIS_DOMAIN}:{self.REDIS_PORT}"
 
     class Config:
         env_file = ".env"
