@@ -29,12 +29,13 @@ class MessageRepository(BaseRepository[Message]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_message_history(self, message_uuid: UUID) -> list[str]:
+    async def get_message_history(self, message_uuid: UUID) -> list[Message]:
         parent_alias = aliased(self.model)
 
         cte = (
             select(
-                self.model,
+                self.model.uuid.label("uuid"),
+                self.model.parent_uuid.label("parent_uuid"),
                 literal_column("0").label("depth")
             )
             .where(self.model.uuid == message_uuid)
@@ -45,15 +46,20 @@ class MessageRepository(BaseRepository[Message]):
 
         cte = cte.union_all(
             select(
-                parent_alias,
+                parent_alias.uuid.label("uuid"),
+                parent_alias.parent_uuid.label("parent_uuid"),
                 (cte_alias.c.depth + 1).label("depth")
-            )
-            .where(parent_alias.uuid == cte_alias.c.parent_uuid)
+            ).where(parent_alias.uuid == cte_alias.c.parent_uuid)
         )
 
-        query = select(cte).order_by(cte.c.depth.desc())
+        query = (
+            select(self.model)
+            .join(cte, self.model.uuid == cte.c.uuid)
+            .options(selectinload(self.model.documents))
+            .order_by(cte.c.depth.desc())
+        )
 
         result = await self.session.execute(query)
-        messages = result.scalars().all()
+        messages = result.scalars().unique().all()
 
         return messages

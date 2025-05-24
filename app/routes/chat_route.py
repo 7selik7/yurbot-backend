@@ -15,6 +15,7 @@ from app.schemas.user_schemas import FullUser
 
 from app.services import get_chat_service, AuthService, ArticleService, get_article_service
 from app.services.chat_service import ChatService
+from app.utils.document_reader import document_reader
 from app.utils.manual_dependencies import resolve_async_generator
 
 router = APIRouter()
@@ -114,10 +115,20 @@ async def websocket_endpoint(
         messages = await chat_service.message_repository.get_message_history(message_uuid=answer_uuid)
 
         try:
-            await websocket.send_json({"type": "start", "message": messages[-2]})
+            await websocket.send_json({"type": "start", "message": messages[-2].text})
 
             last_user_message = messages[-2]
-            context_from_article = await article_service.find_nearest_articles(text=last_user_message)
+            context_from_article = await article_service.find_nearest_articles(
+                text=last_user_message.text,
+                similarity_threshold=0.9
+            )
+
+            document_context = ""
+
+            for doc in last_user_message.documents:
+                print(f"Читаємо документ: {doc.url}")
+                doc_text = document_reader.read_document_content(doc.url, doc.mime_type or "")
+                document_context += f"\n📄 Документ: {doc.name}\n{doc_text[:1000]}...\n"
 
             history_prompt = ""
             for i, msg in enumerate(messages):
@@ -125,11 +136,14 @@ async def websocket_endpoint(
                     continue
 
                 role = "Асистент" if i % 2 == 0 else "Користувач"
-                history_prompt += f"{role}: {msg}\n"
+                history_prompt += f"{role}: {msg.text}\n"
 
             final_prompt = (
-                f"Ознайомся з наступною інформацією з Кримінального Кодексу України, яка може буде корисна для "
-                f"відповіді на питання:\n{context_from_article}\n\n{history_prompt}"
+                f"Ознайомся з наступною інформацією з Кримінального Кодексу України, яка може бути корисна для відповіді на питання:\n"
+                f"{context_from_article}\n\n"
+                f"Також врахуй вміст прикріплених документів:\n{document_context}\n\n"
+                f"Історія:\n"
+                f"{history_prompt}"
             )
 
             print(final_prompt)

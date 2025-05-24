@@ -27,7 +27,7 @@ class ArticleService:
                 })
 
 
-    async def find_nearest_articles(self, text: str, similarity_threshold: float = 0.3) -> str:
+    async def find_nearest_articles(self, text: str, similarity_threshold: float = 0.9) -> str:
         query_embedding = model.encode(text, normalize_embeddings=True).tolist()
         results = await self.article_repository.find_nearest(query_embedding=query_embedding, top_k=10)
 
